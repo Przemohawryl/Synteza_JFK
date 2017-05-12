@@ -3,31 +3,29 @@ package pl.edu.wat;
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.expr.*;
-import com.github.javaparser.ast.stmt.BlockStmt;
-import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
+import com.github.javaparser.ast.body.Parameter;
 
 import javax.tools.*;
-import java.io.*;
-import java.util.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.Arrays;
 
 public class Main {
 
     public static void main(String[] args) throws IOException {
-        final String fileName = "src\\Class.java";
-        final String alteredFileName = "src\\ClassAltered.java";
+        final String fileName = "src\\ExampleClass.java";
+        final String alteredFileName = "src\\ExampleClassAltered.java";
         CompilationUnit cu;
         try(FileInputStream in = new FileInputStream(fileName)){
             cu = JavaParser.parse(in);
         }
 
         cu.getNodesByType(MethodDeclaration.class)
-			.stream()
-			.filter(m -> !m.getNameAsString().equalsIgnoreCase("log"))
-			.forEach(Main::weaveLog);
+			.forEach(Main::setMethodDescription);
 
-//        new Rewriter().visit(cu, null);
-        cu.getClassByName("Class").get().setName("ClassAltered");
+        cu.getClassByName("ExampleClass").get().setName("ExampleClassAltered");
 
         try(FileWriter output = new FileWriter(new File(alteredFileName), false)) {
             output.write(cu.toString());
@@ -53,40 +51,19 @@ public class Main {
         }
     }
 
-    private static BlockStmt GetMethodStmt(MethodDeclaration method){
-        BlockStmt block;
-        Optional<BlockStmt> body = method.getBody();
-        if (!body.isPresent()){
-            block = new BlockStmt();
-            method.setBody(block);
-        }
-        else {
-            block = body.get();
-        }
-
-        return block;
+    private static void setMethodDescription(MethodDeclaration method) {
+        method.setBlockComment("Returned type of method: " + method.getType() + getParameters(method));
     }
 
-    private static void weaveLog(MethodDeclaration method) {
-        BlockStmt block = GetMethodStmt(method);
-
-        MethodCallExpr call = new MethodCallExpr(null, "log");
-        call.addArgument(new StringLiteralExpr(method.getNameAsString()));
-
-        block.addStatement(0, call);
-    }
-
-    private static class Rewriter extends VoidVisitorAdapter<Void> {
-        @Override
-        public void visit(MethodDeclaration n, Void arg) {
-            String methodName = n.getNameAsString();
-            if ("log".equalsIgnoreCase(methodName))
-                return;
-
-            BlockStmt block = GetMethodStmt(n);
-
-            Expression call = JavaParser.parseExpression("log(\"" + n.getNameAsString() + "\")");
-            block.addStatement(0, call);
+    private static String getParameters(MethodDeclaration method) {
+        String temp = "\n\t";
+        int i = 0;
+        if (method.getParameters() == null) return "";
+        else temp += "Parameter" + (method.getParameters().size() > 1 ? "s of method: " : " of method: ");
+        for(Parameter parameter : method.getParameters()) {
+            i++;
+            temp += String.format("{%d}(Name = " + parameter.getName() + ", Type = " + parameter.getType() + ")" + (i == method.getParameters().size() ? ". " : "; "), i - 1);
         }
+        return temp;
     }
 }
